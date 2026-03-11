@@ -7,6 +7,7 @@ from app.home import render_home
 from app.scanner import render_scanner
 from app.diary import render_diary
 from app.tracker import render_tracker
+from app.analytics import render_analytics
 from app.auth import render_auth
 
 # --- Bootstrap ---
@@ -31,5 +32,7 @@ elif "Scan" in page:
     render_scanner()
 elif "Tracker" in page:
     render_tracker()
+elif "Analytics" in page:
+    render_analytics()
 elif "Diary" in page:
     render_diary()

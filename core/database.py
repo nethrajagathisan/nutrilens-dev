@@ -350,3 +350,78 @@ def get_daily_hydration_summary(user_id: int, days: int = 14) -> list[dict]:
     result = [dict(r) for r in rows]
     conn.close()
     return result
+
+
+# ─── ANALYTICS QUERIES ─────────────────────────────────
+
+def get_meal_distribution(user_id: int, days: int = 30) -> list[dict]:
+    """Return total calories and entry count grouped by meal category."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT meal,
+                  COUNT(*)       AS entry_count,
+                  SUM(calories)  AS total_cals
+           FROM food_logs
+           WHERE user_id = ?
+             AND logged_at >= date('now', ?)
+           GROUP BY meal
+           ORDER BY total_cals DESC""",
+        (user_id, f"-{days} days"),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    conn.close()
+    return result
+
+
+def get_all_food_logs_range(user_id: int, days: int = 30) -> list[dict]:
+    """Return every food log row for the past N days."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT * FROM food_logs
+           WHERE user_id = ?
+             AND logged_at >= date('now', ?)
+           ORDER BY logged_at""",
+        (user_id, f"-{days} days"),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    conn.close()
+    return result
+
+
+def get_streak_and_totals(user_id: int) -> dict:
+    """Return lifetime stats: total logs, total calories, active days, streak."""
+    conn = get_connection()
+
+    totals = conn.execute(
+        """SELECT COUNT(*) AS total_entries,
+                  COALESCE(SUM(calories), 0) AS total_cals
+           FROM food_logs WHERE user_id = ?""",
+        (user_id,),
+    ).fetchone()
+
+    # Days with at least one log
+    days_rows = conn.execute(
+        """SELECT DISTINCT date(logged_at) AS day
+           FROM food_logs WHERE user_id = ?
+           ORDER BY day DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+
+    active_days = len(days_rows)
+    streak = 0
+    if days_rows:
+        today = datetime.date.today()
+        for i, row in enumerate(days_rows):
+            expected = (today - datetime.timedelta(days=i)).isoformat()
+            if row["day"] == expected:
+                streak += 1
+            else:
+                break
+
+    return {
+        "total_entries": totals["total_entries"],
+        "total_cals":    totals["total_cals"],
+        "active_days":   active_days,
+        "streak":        streak,
+    }

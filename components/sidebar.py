@@ -32,7 +32,7 @@ def render_sidebar():
         st.markdown("### 🧭 Menu")
         page = st.radio(
             "Go to:",
-            ["🏠 Home & Health", "📸 Scan & Eat", "� Tracker", "�📊 My Diary"],
+            ["🏠 Home & Health", "📸 Scan & Eat", "📝 Tracker", "📊 My Diary", "📉 Analytics"],
             label_visibility="collapsed",
         )
         st.session_state["page"] = page
