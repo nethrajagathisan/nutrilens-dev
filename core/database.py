@@ -273,3 +273,80 @@ def get_weight_history(user_id: int) -> list[dict]:
     result = [dict(r) for r in rows]
     conn.close()
     return result
+
+
+# ─── EXTENDED QUERY HELPERS ────────────────────────────
+
+def get_food_logs_by_date(user_id: int, date_str: str) -> list[dict]:
+    """Return food logs for a specific date (YYYY-MM-DD)."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT * FROM food_logs
+           WHERE user_id = ? AND date(logged_at) = ?
+           ORDER BY logged_at""",
+        (user_id, date_str),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    conn.close()
+    return result
+
+
+def delete_food_log(log_id: int, user_id: int):
+    """Delete a single food log entry (user_id prevents cross-user deletion)."""
+    conn = get_connection()
+    conn.execute(
+        "DELETE FROM food_logs WHERE id = ? AND user_id = ?",
+        (log_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_daily_calorie_summary(user_id: int, days: int = 14) -> list[dict]:
+    """Return per-day calorie totals for the last N days."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT date(logged_at) AS day, SUM(calories) AS total_cals,
+                  SUM(carbs) AS total_carbs, SUM(protein) AS total_protein,
+                  SUM(fat) AS total_fat
+           FROM food_logs
+           WHERE user_id = ?
+             AND logged_at >= date('now', ?)
+           GROUP BY day
+           ORDER BY day""",
+        (user_id, f"-{days} days"),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    conn.close()
+    return result
+
+
+def get_hydration_by_date(user_id: int, date_str: str) -> int:
+    """Return total ml consumed on a specific date."""
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT COALESCE(SUM(amount_ml), 0) AS total
+           FROM hydration_logs
+           WHERE user_id = ? AND date(logged_at) = ?""",
+        (user_id, date_str),
+    ).fetchone()
+    total = row["total"]
+    conn.close()
+    return total
+
+
+def get_daily_hydration_summary(user_id: int, days: int = 14) -> list[dict]:
+    """Return per-day hydration totals for the last N days."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT date(logged_at) AS day, SUM(amount_ml) AS total_ml
+           FROM hydration_logs
+           WHERE user_id = ?
+             AND logged_at >= date('now', ?)
+           GROUP BY day
+           ORDER BY day""",
+        (user_id, f"-{days} days"),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    conn.close()
+    return result
