@@ -2,6 +2,13 @@ import streamlit as st
 import time
 
 from core.ai_engine import connect_to_best_model, chat_ai
+from core.database import (
+    update_user,
+    add_hydration,
+    get_hydration_today,
+    add_weight_log,
+    get_or_create_user,
+)
 
 
 def render_sidebar():
@@ -38,14 +45,27 @@ def render_sidebar():
             st.success(f"🟢 {st.session_state['active_model']}")
 
         # --- PROFILE ---
+        uid = st.session_state["user_id"]
+        db_user = get_or_create_user("default")
+
         with st.expander("👤 Edit Profile", expanded=False):
-            age = st.number_input("Age", 10, 100, 25)
-            gender = st.radio("Gender", ["Male 👨", "Female 👩"], horizontal=True)
-            w = st.number_input("Weight (kg)", 30, 150, 70)
-            h = st.number_input("Height (cm)", 100, 250, 175)
-            act = st.selectbox("Activity", ["Lazy 🛋️", "Active 🏃", "Athlete 🏋️"])
+            age = st.number_input("Age", 10, 100, db_user["age"])
+            gender_opts = ["Male 👨", "Female 👩"]
+            gender_idx = 0 if "Male" in db_user["gender"] else 1
+            gender = st.radio("Gender", gender_opts, index=gender_idx, horizontal=True)
+            w = st.number_input("Weight (kg)", 30, 150, int(db_user["weight_kg"]))
+            h = st.number_input("Height (cm)", 100, 250, int(db_user["height_cm"]))
+            act_opts = ["Lazy 🛋️", "Active 🏃", "Athlete 🏋️"]
+            act_idx = next(
+                (i for i, a in enumerate(act_opts) if db_user["activity"] in a), 1
+            )
+            act = st.selectbox("Activity", act_opts, index=act_idx)
+            diet_opts = ["Balanced ⚖️", "Keto 🥩", "Vegan 🥗"]
+            diet_idx = next(
+                (i for i, d in enumerate(diet_opts) if db_user["diet"] in d), 0
+            )
             st.session_state["user_diet"] = st.selectbox(
-                "Diet", ["Balanced ⚖️", "Keto 🥩", "Vegan 🥗"]
+                "Diet", diet_opts, index=diet_idx
             )
 
             if st.button("Save Stats"):
@@ -62,16 +82,37 @@ def render_sidebar():
                 else:
                     mult = 1.9
 
-                st.session_state["daily_goal"] = int(base_bmr * mult)
-                st.success(f"Updated! Goal: {st.session_state['daily_goal']} kcal 🚀")
+                daily_goal = int(base_bmr * mult)
+                st.session_state["daily_goal"] = daily_goal
+
+                # Persist to DB
+                diet_clean = st.session_state["user_diet"].split(" ")[0]
+                gender_clean = "Male" if "Male" in gender else "Female"
+                act_clean = act.split(" ")[0]
+                update_user(
+                    uid,
+                    age=age,
+                    gender=gender_clean,
+                    weight_kg=w,
+                    height_cm=h,
+                    activity=act_clean,
+                    diet=diet_clean,
+                    bmi=bmi,
+                    daily_goal=daily_goal,
+                )
+                # Log weight change
+                add_weight_log(uid, w)
+                st.success(f"Updated! Goal: {daily_goal} kcal 🚀")
 
         # --- HYDRATION ---
         st.write("### 💧 Hydration")
         w_col1, w_col2 = st.columns(2)
         if w_col1.button("🥤 Cup\n(250ml)"):
-            st.session_state["water_ml"] += 250
+            add_hydration(uid, 250)
+            st.session_state["water_ml"] = get_hydration_today(uid)
         if w_col2.button("🍼 Bottle\n(500ml)"):
-            st.session_state["water_ml"] += 500
+            add_hydration(uid, 500)
+            st.session_state["water_ml"] = get_hydration_today(uid)
 
         w_target = 3000
         w_curr = st.session_state["water_ml"]

@@ -6,6 +6,7 @@ from PIL import Image
 import datetime
 
 from core.ai_engine import analyze_image, get_recipes
+from core.database import add_food_log
 
 
 def render_scanner():
@@ -118,16 +119,14 @@ def render_scanner():
                 "Meal", ["Breakfast 🍳", "Lunch 🥗", "Dinner 🍗", "Snack 🍎"]
             )
             if st.button("➕ Add to Diary"):
-                st.session_state["food_log"].append(
-                    {
-                        "name": d["name"],
-                        "cals": rcals,
-                        "carbs": int(d["carbs"] * factor),
-                        "prot": int(d["prot"] * factor),
-                        "fat": int(d["fat"] * factor),
-                        "meal": meal,
-                        "time": datetime.datetime.now().strftime("%H:%M"),
-                    }
+                add_food_log(
+                    user_id=st.session_state["user_id"],
+                    name=d["name"],
+                    calories=rcals,
+                    carbs=int(d["carbs"] * factor),
+                    protein=int(d["prot"] * factor),
+                    fat=int(d["fat"] * factor),
+                    meal=meal,
                 )
                 st.balloons()
                 st.success("Logged! 📝")

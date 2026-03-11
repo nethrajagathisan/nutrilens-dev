@@ -1,12 +1,22 @@
 import streamlit as st
 import pandas as pd
 
+from core.database import get_food_logs_today, clear_food_logs_today
+
 
 def render_diary():
     st.subheader("📊 Your Daily Progress")
 
-    if st.session_state["food_log"]:
-        df = pd.DataFrame(st.session_state["food_log"])
+    uid = st.session_state["user_id"]
+    logs = get_food_logs_today(uid)
+
+    if logs:
+        df = pd.DataFrame(logs)
+        # Rename DB columns to display-friendly names
+        df = df.rename(columns={
+            "calories": "cals",
+            "protein": "prot",
+        })
         total = df["cals"].sum()
 
         st.metric(
@@ -21,9 +31,10 @@ def render_diary():
         b2.metric("Protein", f"{df['prot'].sum()}g")
         b3.metric("Fat", f"{df['fat'].sum()}g")
 
-        st.dataframe(df, use_container_width=True)
+        display_df = df[["name", "cals", "carbs", "prot", "fat", "meal", "logged_at"]]
+        st.dataframe(display_df, use_container_width=True)
         if st.button("Clear History"):
-            st.session_state["food_log"] = []
+            clear_food_logs_today(uid)
             st.rerun()
     else:
         st.info("Empty! Eat something yummy 😋")
