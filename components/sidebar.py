@@ -7,7 +7,7 @@ from core.database import (
     add_hydration,
     get_hydration_today,
     add_weight_log,
-    get_or_create_user,
+    get_user_by_id,
 )
 
 
@@ -15,6 +15,17 @@ def render_sidebar():
     """Render the full sidebar: nav, API key, profile, hydration, chatbot."""
     with st.sidebar:
         st.markdown("## 🥑 NutriLens")
+
+        # --- USER INFO + LOGOUT ---
+        st.markdown(
+            f"<p style='color:#bbb; margin:0;'>👤 Logged in as "
+            f"<b style='color:#00E676;'>{st.session_state.get('username', '')}</b></p>",
+            unsafe_allow_html=True,
+        )
+        if st.button("🚨 Logout", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
 
         # --- NAVIGATION ---
         st.write("---")
@@ -46,7 +57,7 @@ def render_sidebar():
 
         # --- PROFILE ---
         uid = st.session_state["user_id"]
-        db_user = get_or_create_user("default")
+        db_user = get_user_by_id(uid) or {}
 
         with st.expander("👤 Edit Profile", expanded=False):
             age = st.number_input("Age", 10, 100, db_user["age"])

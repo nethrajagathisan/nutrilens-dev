@@ -1,5 +1,5 @@
 import streamlit as st
-from core.database import init_db, get_or_create_user, get_hydration_today
+from core.database import init_db
 
 PAGE_CONFIG = {
     "page_title": "NutriLens",
@@ -9,12 +9,22 @@ PAGE_CONFIG = {
 }
 
 SESSION_DEFAULTS = {
+    # Auth
+    "logged_in": False,
+    "user_id": None,
+    "username": "",
+    # App state
     "page": "Home",
     "scan_data": None,
     "api_key": "",
     "active_model": None,
     "chat_history": [],
     "recipe_result": None,
+    # User profile (populated after login)
+    "daily_goal": 2000,
+    "bmi": 0.0,
+    "user_diet": "Balanced",
+    "water_ml": 0,
 }
 
 
@@ -25,12 +35,3 @@ def init_session_state():
     for k, v in SESSION_DEFAULTS.items():
         if k not in st.session_state:
             st.session_state[k] = v
-
-    # Load user from DB
-    if "user_id" not in st.session_state:
-        user = get_or_create_user("default")
-        st.session_state["user_id"] = user["id"]
-        st.session_state["daily_goal"] = user["daily_goal"]
-        st.session_state["bmi"] = user["bmi"]
-        st.session_state["user_diet"] = user["diet"]
-        st.session_state["water_ml"] = get_hydration_today(user["id"])

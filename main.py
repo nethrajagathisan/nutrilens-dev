@@ -6,11 +6,17 @@ from components.sidebar import render_sidebar
 from app.home import render_home
 from app.scanner import render_scanner
 from app.diary import render_diary
+from app.auth import render_auth
 
 # --- Bootstrap ---
 st.set_page_config(**PAGE_CONFIG)
 inject_css()
 init_session_state()
+
+# --- Auth Gate ---
+if not st.session_state["logged_in"]:
+    render_auth()
+    st.stop()
 
 # --- Sidebar (nav + widgets) ---
 render_sidebar()

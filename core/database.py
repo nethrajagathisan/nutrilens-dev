@@ -2,7 +2,17 @@ import sqlite3
 import os
 import datetime
 
+import bcrypt
+
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nutrilens.db")
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def get_connection():
@@ -19,19 +29,22 @@ def init_db():
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT    NOT NULL DEFAULT 'default',
-            age         INTEGER NOT NULL DEFAULT 25,
-            gender      TEXT    NOT NULL DEFAULT 'Male',
-            weight_kg   REAL    NOT NULL DEFAULT 70,
-            height_cm   REAL    NOT NULL DEFAULT 175,
-            activity    TEXT    NOT NULL DEFAULT 'Active',
-            diet        TEXT    NOT NULL DEFAULT 'Balanced',
-            bmi         REAL    NOT NULL DEFAULT 0,
-            daily_goal  INTEGER NOT NULL DEFAULT 2000,
-            created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            username      TEXT    NOT NULL DEFAULT '',
+            password_hash TEXT    NOT NULL DEFAULT '',
+            name          TEXT    NOT NULL DEFAULT '',
+            age           INTEGER NOT NULL DEFAULT 25,
+            gender        TEXT    NOT NULL DEFAULT 'Male',
+            weight_kg     REAL    NOT NULL DEFAULT 70,
+            height_cm     REAL    NOT NULL DEFAULT 175,
+            activity      TEXT    NOT NULL DEFAULT 'Active',
+            diet          TEXT    NOT NULL DEFAULT 'Balanced',
+            bmi           REAL    NOT NULL DEFAULT 0,
+            daily_goal    INTEGER NOT NULL DEFAULT 2000,
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    _run_migrations(conn)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS food_logs (
@@ -70,6 +83,77 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def _run_migrations(conn):
+    """Safely add new columns to existing databases without breaking old data."""
+    new_cols = [
+        "ALTER TABLE users ADD COLUMN username      TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN name          TEXT NOT NULL DEFAULT ''",
+    ]
+    for sql in new_cols:
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass  # Column already exists
+    # Unique index only for non-empty usernames (partial index)
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username "
+            "ON users(username) WHERE username != ''"
+        )
+    except Exception:
+        pass
+    conn.commit()
+
+
+# ─── AUTH ──────────────────────────────────────────────
+
+def register_user(username: str, password: str) -> dict | None:
+    """Register a new user. Returns user dict on success, None if username taken."""
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if existing:
+        conn.close()
+        return None
+    hashed = _hash_password(password)
+    conn.execute(
+        "INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)",
+        (username, hashed, username),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    result = dict(row)
+    conn.close()
+    return result
+
+
+def authenticate_user(username: str, password: str) -> dict | None:
+    """Verify credentials. Returns user dict on success, None on failure."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    user = dict(row)
+    if not user["password_hash"] or not _verify_password(password, user["password_hash"]):
+        return None
+    return user
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    """Return a user row by primary key."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 # ─── USER ──────────────────────────────────────────────
