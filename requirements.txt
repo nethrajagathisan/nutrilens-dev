@@ -3,5 +3,8 @@ google-generativeai
 pandas
 plotly
 gTTS
+requests
 Pillow
 bcrypt
+chromadb
+SpeechRecognition

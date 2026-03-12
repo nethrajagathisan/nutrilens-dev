@@ -6,6 +6,7 @@ import datetime
 
 from core.database import (
     get_daily_calorie_summary,
+    get_daily_exercise_summary,
     get_daily_hydration_summary,
     get_weight_history,
     get_meal_distribution,
@@ -13,6 +14,8 @@ from core.database import (
     get_streak_and_totals,
     get_user_by_id,
 )
+from core.ai_engine import chat_ai_rag
+from core.rag_engine import build_user_log_context, get_retrieved_sources
 
 # ── Chart theme defaults ──────────────────────────────────────────────────────
 _LAYOUT = dict(
@@ -398,6 +401,42 @@ def render_analytics():
             st.warning(f"{icon} {text}")
         else:
             st.info(f"{icon} {text}")
+
+    st.write("---")
+    st.markdown("### 🤖 RAG Fitness & Nutrition Coach")
+    st.caption("Uses the verified coach knowledge base plus your last 7 days of food, hydration, weight, and exercise logs.")
+    with st.expander("📊 Last 7-Day Coach Context", expanded=False):
+        st.code(build_user_log_context(uid, days=7))
+
+    coach_query = (
+        "Based on my last 7 days of food, hydration, weight, and exercise logs, "
+        "what are the top 3 evidence-based nutrition and fitness adjustments I should make this week?"
+    )
+    if st.button("Generate Coach Insight", key="analytics_coach_button"):
+        with st.spinner("Building personalized coach advice..."):
+            st.session_state["coach_last_insight"] = chat_ai_rag(
+                coach_query,
+                "Analytics insight request",
+                user_id=uid,
+            )
+            st.session_state["coach_last_sources"] = get_retrieved_sources(
+                coach_query,
+                top_k=4,
+                user_id=uid,
+                user_context="Analytics insight request",
+            )
+
+    if st.session_state.get("coach_last_insight"):
+        st.info(st.session_state["coach_last_insight"])
+        if st.session_state.get("coach_last_sources"):
+            badges = ""
+            for source in st.session_state["coach_last_sources"]:
+                badges += (
+                    f'<span style="display:inline-block; background:#1b5e20; color:white; '
+                    f'padding:3px 10px; border-radius:12px; margin:2px 4px; font-size:0.85rem;">'
+                    f'{source["topic"]} — {source["score"] * 100:.0f}%</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
 
 
 def _generate_insights(df_cal, df_hyd, df_meal, daily_goal, db_user) -> list:

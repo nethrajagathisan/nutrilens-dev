@@ -6,9 +6,14 @@ from core.database import (
     add_hydration,
     get_hydration_today,
     add_weight_log,
+    add_exercise_log,
     get_user_by_id,
     update_user,
+    get_last_food_log_id,
+    add_micronutrient_log,
 )
+from core.fingerprint_engine import update_fingerprint
+from core.ai_engine import estimate_micronutrients
 
 MEAL_OPTIONS = ["Breakfast 🍳", "Lunch 🥗", "Dinner 🍗", "Snack 🍎"]
 
@@ -20,11 +25,11 @@ def render_tracker():
         "<h2 style='color:#00E676;'>📝 Manual Nutrition Tracker</h2>",
         unsafe_allow_html=True,
     )
-    st.caption("Log food, water, and weight without needing AI — works fully offline.")
+    st.caption("Log food, water, weight, and exercise without needing AI — works fully offline.")
     st.write("---")
 
-    tab_food, tab_hydration, tab_weight = st.tabs(
-        ["🍽️ Log Food", "💧 Log Water", "⚖️ Log Weight"]
+    tab_food, tab_hydration, tab_weight, tab_exercise = st.tabs(
+        ["🍽️ Log Food", "💧 Log Water", "⚖️ Log Weight", "🏃 Log Exercise"]
     )
 
     # ── TAB 1: FOOD ──────────────────────────────────────────────────────────
@@ -51,9 +56,19 @@ def render_tracker():
             elif calories == 0:
                 st.warning("⚠️ Calories are 0 — are you sure?")
                 add_food_log(uid, food_name.strip(), calories, carbs, protein, fat, meal)
+                fid = get_last_food_log_id(uid)
+                if fid:
+                    micros = estimate_micronutrients(food_name, calories)
+                    add_micronutrient_log(uid, fid, **micros)
+                update_fingerprint(uid)
                 st.success(f"**{food_name}** logged to {meal}! 📝")
             else:
                 add_food_log(uid, food_name.strip(), calories, carbs, protein, fat, meal)
+                fid = get_last_food_log_id(uid)
+                if fid:
+                    micros = estimate_micronutrients(food_name, calories)
+                    add_micronutrient_log(uid, fid, **micros)
+                update_fingerprint(uid)
                 st.success(f"**{food_name}** ({calories} kcal) logged to {meal}! 📝")
 
         # Quick-add common foods
@@ -75,6 +90,11 @@ def render_tracker():
             if cols[i % 4].button(label, use_container_width=True):
                 name_clean = label.split(" ", 1)[1].split("(")[0].strip()
                 add_food_log(uid, name_clean, cals, c, p, f_, q_meal)
+                fid = get_last_food_log_id(uid)
+                if fid:
+                    micros = estimate_micronutrients(name_clean, cals)
+                    add_micronutrient_log(uid, fid, **micros)
+                update_fingerprint(uid)
                 st.success(f"**{name_clean}** added!")
                 st.rerun()
 
@@ -173,4 +193,53 @@ def render_tracker():
                 st.success(
                     f"Weight updated: **{new_weight} kg** | BMI: **{new_bmi:.1f}**"
                 )
+                st.rerun()
+
+    # ── TAB 4: EXERCISE ─────────────────────────────────────────────────────
+    with tab_exercise:
+        st.markdown("### Log Exercise")
+        st.caption("Track workouts so the AI coach can combine fitness and nutrition advice.")
+
+        with st.form("exercise_form", clear_on_submit=True):
+            ex_col1, ex_col2 = st.columns([2, 1])
+            activity_name = ex_col1.text_input(
+                "Activity *", placeholder="e.g. Brisk Walk, Strength Training"
+            )
+            intensity = ex_col2.selectbox("Intensity", ["Light", "Moderate", "High"])
+
+            ex_col3, ex_col4 = st.columns(2)
+            duration_min = ex_col3.number_input(
+                "Duration (min)", min_value=5, max_value=300, value=30, step=5
+            )
+            calories_burned = ex_col4.number_input(
+                "Calories Burned", min_value=0, max_value=3000, value=0, step=10
+            )
+
+            if st.form_submit_button("➕ Save Exercise", use_container_width=True):
+                if not activity_name.strip():
+                    st.error("Activity name is required.")
+                else:
+                    add_exercise_log(
+                        uid,
+                        activity_name.strip(),
+                        duration_min,
+                        calories_burned,
+                        intensity,
+                    )
+                    st.success(f"Logged **{activity_name}** for **{duration_min} min**.")
+                    st.rerun()
+
+        st.write("---")
+        st.markdown("#### ⚡ Quick-Add Workouts")
+        quick_workouts = [
+            ("🚶 Brisk Walk", 30, 140, "Light"),
+            ("🏃 Run", 30, 300, "High"),
+            ("🚴 Cycling", 45, 360, "Moderate"),
+            ("🏋️ Strength", 45, 250, "Moderate"),
+        ]
+        ex_cols = st.columns(4)
+        for i, (label, mins, cals, intensity_label) in enumerate(quick_workouts):
+            if ex_cols[i].button(label, use_container_width=True):
+                add_exercise_log(uid, label.split(" ", 1)[1], mins, cals, intensity_label)
+                st.success(f"Added **{label.split(' ', 1)[1]}**.")
                 st.rerun()
