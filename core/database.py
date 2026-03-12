@@ -44,7 +44,6 @@ def init_db():
             created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
         )
     """)
-    _run_migrations(conn)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS food_logs (
@@ -170,6 +169,7 @@ def init_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id     INTEGER NOT NULL,
             food_log_id INTEGER,
+            food_name   TEXT NOT NULL DEFAULT '',
             iron        REAL NOT NULL DEFAULT 0,
             calcium     REAL NOT NULL DEFAULT 0,
             vitamin_c   REAL NOT NULL DEFAULT 0,
@@ -183,12 +183,14 @@ def init_db():
         )
     """)
 
+    _run_migrations(conn)
+
     conn.commit()
     conn.close()
 
 
 def _run_migrations(conn):
-    """Safely add new columns to existing databases without breaking old data."""
+    """Safely backfill schema changes for existing databases."""
     new_cols = [
         "ALTER TABLE users ADD COLUMN username      TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
@@ -207,7 +209,110 @@ def _run_migrations(conn):
         )
     except Exception:
         pass
+    _migrate_micronutrient_logs(conn)
     conn.commit()
+
+
+def _get_table_columns(conn, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {row["name"] for row in rows}
+
+
+def _migrate_micronutrient_logs(conn):
+    existing_columns = _get_table_columns(conn, "micronutrient_logs")
+    if not existing_columns:
+        return
+
+    expected_columns = {
+        "id",
+        "user_id",
+        "food_log_id",
+        "food_name",
+        "iron",
+        "calcium",
+        "vitamin_c",
+        "vitamin_d",
+        "fiber",
+        "sodium",
+        "sugar",
+        "logged_at",
+    }
+    legacy_columns = {
+        "iron_mg",
+        "calcium_mg",
+        "vitamin_c_mg",
+        "vitamin_d_mcg",
+        "fiber_g",
+        "sodium_mg",
+        "sugar_g",
+    }
+    if expected_columns.issubset(existing_columns) and legacy_columns.isdisjoint(existing_columns):
+        return
+
+    if "food_log_id" in existing_columns:
+        food_log_id_expr = (
+            "CASE "
+            "WHEN food_log_id IS NOT NULL "
+            "AND EXISTS (SELECT 1 FROM food_logs WHERE id = food_log_id) "
+            "THEN food_log_id ELSE NULL END"
+        )
+    else:
+        food_log_id_expr = "NULL"
+
+    if "food_name" in existing_columns:
+        food_name_expr = "COALESCE(food_name, '')"
+    elif "food_log_id" in existing_columns:
+        food_name_expr = "COALESCE((SELECT name FROM food_logs WHERE id = food_log_id), '')"
+    else:
+        food_name_expr = "''"
+
+    iron_expr = "COALESCE(iron, 0)" if "iron" in existing_columns else "COALESCE(iron_mg, 0)"
+    calcium_expr = "COALESCE(calcium, 0)" if "calcium" in existing_columns else "COALESCE(calcium_mg, 0)"
+    vitamin_c_expr = "COALESCE(vitamin_c, 0)" if "vitamin_c" in existing_columns else "COALESCE(vitamin_c_mg, 0)"
+    vitamin_d_expr = "COALESCE(vitamin_d, 0)" if "vitamin_d" in existing_columns else "COALESCE(vitamin_d_mcg, 0)"
+    fiber_expr = "COALESCE(fiber, 0)" if "fiber" in existing_columns else "COALESCE(fiber_g, 0)"
+    sodium_expr = "COALESCE(sodium, 0)" if "sodium" in existing_columns else "COALESCE(sodium_mg, 0)"
+    sugar_expr = "COALESCE(sugar, 0)" if "sugar" in existing_columns else "COALESCE(sugar_g, 0)"
+    logged_at_expr = "COALESCE(logged_at, datetime('now'))" if "logged_at" in existing_columns else "datetime('now')"
+
+    conn.execute("DROP TABLE IF EXISTS micronutrient_logs_legacy")
+    conn.execute("ALTER TABLE micronutrient_logs RENAME TO micronutrient_logs_legacy")
+    conn.execute("""
+        CREATE TABLE micronutrient_logs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            food_log_id INTEGER,
+            food_name   TEXT NOT NULL DEFAULT '',
+            iron        REAL NOT NULL DEFAULT 0,
+            calcium     REAL NOT NULL DEFAULT 0,
+            vitamin_c   REAL NOT NULL DEFAULT 0,
+            vitamin_d   REAL NOT NULL DEFAULT 0,
+            fiber       REAL NOT NULL DEFAULT 0,
+            sodium      REAL NOT NULL DEFAULT 0,
+            sugar       REAL NOT NULL DEFAULT 0,
+            logged_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (food_log_id) REFERENCES food_logs(id)
+        )
+    """)
+    conn.execute(
+        f"""INSERT INTO micronutrient_logs
+               (id, user_id, food_log_id, food_name, iron, calcium, vitamin_c, vitamin_d, fiber, sodium, sugar, logged_at)
+               SELECT id,
+                      user_id,
+                      {food_log_id_expr},
+                      {food_name_expr},
+                      {iron_expr},
+                      {calcium_expr},
+                      {vitamin_c_expr},
+                      {vitamin_d_expr},
+                      {fiber_expr},
+                      {sodium_expr},
+                      {sugar_expr},
+                      {logged_at_expr}
+                 FROM micronutrient_logs_legacy"""
+    )
+    conn.execute("DROP TABLE micronutrient_logs_legacy")
 
 
 # ─── AUTH ──────────────────────────────────────────────
@@ -797,9 +902,9 @@ def add_micronutrient_log(user_id: int, food_log_id: int, iron: float,
     conn = get_connection()
     conn.execute(
         """INSERT INTO micronutrient_logs
-           (user_id, food_log_id, iron, calcium, vitamin_c, vitamin_d, fiber, sodium, sugar)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (user_id, food_log_id, iron, calcium, vitamin_c, vitamin_d, fiber, sodium, sugar),
+              (user_id, food_log_id, food_name, iron, calcium, vitamin_c, vitamin_d, fiber, sodium, sugar)
+              VALUES (?, ?, COALESCE((SELECT name FROM food_logs WHERE id = ?), ''), ?, ?, ?, ?, ?, ?, ?)""",
+          (user_id, food_log_id, food_log_id, iron, calcium, vitamin_c, vitamin_d, fiber, sodium, sugar),
     )
     conn.commit()
     conn.close()
