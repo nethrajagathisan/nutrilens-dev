@@ -41,6 +41,9 @@ def init_db():
             diet          TEXT    NOT NULL DEFAULT 'Balanced',
             bmi           REAL    NOT NULL DEFAULT 0,
             daily_goal    INTEGER NOT NULL DEFAULT 2000,
+            target_weight REAL    NOT NULL DEFAULT 0,
+            goal_type     TEXT    NOT NULL DEFAULT 'maintain',
+            goal_pace     TEXT    NOT NULL DEFAULT 'medium',
             created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -195,6 +198,9 @@ def _run_migrations(conn):
         "ALTER TABLE users ADD COLUMN username      TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN name          TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN target_weight REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN goal_type     TEXT NOT NULL DEFAULT 'maintain'",
+        "ALTER TABLE users ADD COLUMN goal_pace     TEXT NOT NULL DEFAULT 'medium'",
     ]
     for sql in new_cols:
         try:
@@ -317,8 +323,9 @@ def _migrate_micronutrient_logs(conn):
 
 # ─── AUTH ──────────────────────────────────────────────
 
-def register_user(username: str, password: str) -> dict | None:
-    """Register a new user. Returns user dict on success, None if username taken."""
+def register_user(username: str, password: str, **profile) -> dict | None:
+    """Register a new user with optional onboarding profile data.
+    Returns user dict on success, None if username taken."""
     conn = get_connection()
     existing = conn.execute(
         "SELECT id FROM users WHERE username = ?", (username,)
@@ -327,9 +334,19 @@ def register_user(username: str, password: str) -> dict | None:
         conn.close()
         return None
     hashed = _hash_password(password)
+    allowed = {"age", "gender", "weight_kg", "height_cm", "activity",
+               "diet", "bmi", "daily_goal", "target_weight", "goal_type",
+               "goal_pace"}
+    cols = {k: v for k, v in profile.items() if k in allowed}
+    base_cols = "username, password_hash, name"
+    base_vals = [username, hashed, username]
+    if cols:
+        base_cols += ", " + ", ".join(cols.keys())
+        base_vals += list(cols.values())
+    placeholders = ", ".join(["?"] * len(base_vals))
     conn.execute(
-        "INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)",
-        (username, hashed, username),
+        f"INSERT INTO users ({base_cols}) VALUES ({placeholders})",
+        base_vals,
     )
     conn.commit()
     row = conn.execute(
@@ -381,7 +398,8 @@ def get_or_create_user(name: str = "default") -> dict:
 def update_user(user_id: int, **kwargs):
     """Update arbitrary user columns. Only whitelisted columns accepted."""
     allowed = {"age", "gender", "weight_kg", "height_cm", "activity",
-               "diet", "bmi", "daily_goal", "name"}
+               "diet", "bmi", "daily_goal", "name", "target_weight",
+               "goal_type", "goal_pace"}
     cols = {k: v for k, v in kwargs.items() if k in allowed}
     if not cols:
         return

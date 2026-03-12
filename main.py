@@ -2,9 +2,15 @@ import streamlit as st
 
 from config.settings import PAGE_CONFIG, init_session_state
 from config.styles import inject_css
-from components.sidebar import render_sidebar
+from components.sidebar import render_topnav, render_sidebar
 from app.auth import render_auth
 from app.home import render_home
+from app.log_section import render_log_section
+from app.insights_section import render_insights_section
+from app.plans_section import render_plans_section
+from app.profile_section import render_profile_section
+
+# Legacy imports — still used when navigating to specific sub-pages
 from app.scanner import render_scanner
 from app.tracker import render_tracker
 from app.recipes import render_recipes
@@ -30,14 +36,28 @@ if not st.session_state["logged_in"]:
     render_auth()
     st.stop()
 
-# --- Sidebar (nav + widgets) ---
+# --- Top Navigation Bar ---
+render_topnav()
+
+# --- Sidebar (AI, hydration, coach) ---
 render_sidebar()
 
 # --- Page Router ---
-page = st.session_state["page"]
+page = st.session_state.get("page", "Home")
 
-if "Home" in page:
+# Primary section routing
+if page == "Home":
     render_home()
+elif page == "Log":
+    render_log_section()
+elif page == "Insights":
+    render_insights_section()
+elif page == "Plans":
+    render_plans_section()
+elif page == "Profile":
+    render_profile_section()
+
+# Legacy page routing (for quick-action buttons that link to specific pages)
 elif "Scan" in page:
     render_scanner()
 elif "Tracker" in page:
@@ -66,3 +86,5 @@ elif "Export" in page:
     render_data_export()
 elif "Achievement" in page:
     render_achievements()
+else:
+    render_home()
