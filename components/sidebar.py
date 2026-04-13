@@ -41,6 +41,13 @@ def render_sidebar():
     """Minimal sidebar: AI key, hydration widget, and AI coach chat."""
     with st.sidebar:
         st.markdown("## 🥑 NutriLens")
+        if st.session_state.get("logged_in"):
+            if st.button("Logout", use_container_width=True):
+                from app.auth import logout_user
+
+                logout_user()
+                st.rerun()
+            st.write("---")
 
         # --- CONNECT AI ---
         if not st.session_state.get("active_model"):

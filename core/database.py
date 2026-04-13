@@ -31,6 +31,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             username      TEXT    NOT NULL DEFAULT '',
+            email         TEXT    NOT NULL DEFAULT '',
             password_hash TEXT    NOT NULL DEFAULT '',
             name          TEXT    NOT NULL DEFAULT '',
             age           INTEGER NOT NULL DEFAULT 25,
@@ -38,10 +39,13 @@ def init_db():
             weight_kg     REAL    NOT NULL DEFAULT 70,
             height_cm     REAL    NOT NULL DEFAULT 175,
             activity      TEXT    NOT NULL DEFAULT 'Active',
+            activity_level TEXT   NOT NULL DEFAULT 'Moderately Active',
             diet          TEXT    NOT NULL DEFAULT 'Balanced',
+            diet_type     TEXT    NOT NULL DEFAULT 'Balanced',
             bmi           REAL    NOT NULL DEFAULT 0,
             daily_goal    INTEGER NOT NULL DEFAULT 2000,
             target_weight REAL    NOT NULL DEFAULT 0,
+            target_weight_kg REAL NOT NULL DEFAULT 0,
             goal_type     TEXT    NOT NULL DEFAULT 'maintain',
             goal_pace     TEXT    NOT NULL DEFAULT 'medium',
             created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -196,9 +200,13 @@ def _run_migrations(conn):
     """Safely backfill schema changes for existing databases."""
     new_cols = [
         "ALTER TABLE users ADD COLUMN username      TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN email         TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN name          TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN activity_level TEXT NOT NULL DEFAULT 'Moderately Active'",
+        "ALTER TABLE users ADD COLUMN diet_type     TEXT NOT NULL DEFAULT 'Balanced'",
         "ALTER TABLE users ADD COLUMN target_weight REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN target_weight_kg REAL NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN goal_type     TEXT NOT NULL DEFAULT 'maintain'",
         "ALTER TABLE users ADD COLUMN goal_pace     TEXT NOT NULL DEFAULT 'medium'",
     ]
@@ -215,6 +223,48 @@ def _run_migrations(conn):
         )
     except Exception:
         pass
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email "
+            "ON users(email) WHERE email != ''"
+        )
+    except Exception:
+        pass
+
+    # Backfill new canonical fields from legacy columns where needed.
+    conn.execute("""
+        UPDATE users
+        SET activity_level = CASE
+            WHEN COALESCE(activity_level, '') = '' THEN COALESCE(activity, 'Moderately Active')
+            ELSE activity_level
+        END,
+        diet_type = CASE
+            WHEN COALESCE(diet_type, '') = '' THEN COALESCE(diet, 'Balanced')
+            ELSE diet_type
+        END,
+        target_weight_kg = CASE
+            WHEN COALESCE(target_weight_kg, 0) <= 0 THEN COALESCE(target_weight, weight_kg, 0)
+            ELSE target_weight_kg
+        END
+    """)
+
+    # Keep legacy columns in sync for modules that still read old names.
+    conn.execute("""
+        UPDATE users
+        SET activity = COALESCE(NULLIF(activity_level, ''), activity),
+            diet = COALESCE(NULLIF(diet_type, ''), diet),
+            target_weight = CASE
+                WHEN COALESCE(target_weight, 0) <= 0 THEN COALESCE(target_weight_kg, target_weight, 0)
+                ELSE target_weight
+            END
+    """)
+
+    # If email is empty for legacy users, use username if it looks like an email.
+    conn.execute("""
+        UPDATE users
+        SET email = username
+        WHERE COALESCE(email, '') = '' AND instr(username, '@') > 0
+    """)
     _migrate_micronutrient_logs(conn)
     conn.commit()
 
@@ -323,45 +373,97 @@ def _migrate_micronutrient_logs(conn):
 
 # ─── AUTH ──────────────────────────────────────────────
 
-def register_user(username: str, password: str, **profile) -> dict | None:
-    """Register a new user with optional onboarding profile data.
-    Returns user dict on success, None if username taken."""
+def register_user(email: str, password: str, **profile) -> dict | None:
+    """Register a new user. Returns user dict on success, None if email exists."""
+    email_norm = (email or "").strip().lower()
+    if not email_norm:
+        return None
+
     conn = get_connection()
     existing = conn.execute(
-        "SELECT id FROM users WHERE username = ?", (username,)
+        "SELECT id FROM users WHERE email = ?", (email_norm,)
     ).fetchone()
     if existing:
         conn.close()
         return None
+
     hashed = _hash_password(password)
-    allowed = {"age", "gender", "weight_kg", "height_cm", "activity",
-               "diet", "bmi", "daily_goal", "target_weight", "goal_type",
-               "goal_pace"}
+
+    allowed = {
+        "name",
+        "age",
+        "gender",
+        "height_cm",
+        "weight_kg",
+        "activity_level",
+        "diet_type",
+        "goal_type",
+        "target_weight_kg",
+        "bmi",
+        "daily_goal",
+        # legacy-compatible extras
+        "activity",
+        "diet",
+        "target_weight",
+        "goal_pace",
+        "username",
+    }
     cols = {k: v for k, v in profile.items() if k in allowed}
-    base_cols = "username, password_hash, name"
-    base_vals = [username, hashed, username]
-    if cols:
-        base_cols += ", " + ", ".join(cols.keys())
-        base_vals += list(cols.values())
+
+    display_name = str(cols.get("name") or email_norm.split("@")[0]).strip()
+    username = str(cols.get("username") or email_norm).strip()
+    activity_level = cols.get("activity_level") or cols.get("activity") or "Moderately Active"
+    diet_type = cols.get("diet_type") or cols.get("diet") or "Balanced"
+    target_weight_kg = float(cols.get("target_weight_kg") or cols.get("target_weight") or cols.get("weight_kg") or 0)
+
+    base_cols = (
+        "username, email, password_hash, name, age, gender, height_cm, weight_kg, "
+        "activity_level, diet_type, goal_type, target_weight_kg, bmi, daily_goal, "
+        "activity, diet, target_weight, goal_pace"
+    )
+    base_vals = [
+        username,
+        email_norm,
+        hashed,
+        display_name,
+        int(cols.get("age", 25)),
+        str(cols.get("gender", "Male")),
+        float(cols.get("height_cm", 175)),
+        float(cols.get("weight_kg", 70)),
+        str(activity_level),
+        str(diet_type),
+        str(cols.get("goal_type", "maintain")),
+        float(target_weight_kg),
+        float(cols.get("bmi", 0)),
+        int(cols.get("daily_goal", 2000)),
+        str(activity_level),
+        str(diet_type),
+        float(target_weight_kg),
+        str(cols.get("goal_pace", "medium")),
+    ]
+
     placeholders = ", ".join(["?"] * len(base_vals))
     conn.execute(
         f"INSERT INTO users ({base_cols}) VALUES ({placeholders})",
         base_vals,
     )
     conn.commit()
+
     row = conn.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
+        "SELECT * FROM users WHERE email = ?", (email_norm,)
     ).fetchone()
     result = dict(row)
     conn.close()
     return result
 
 
-def authenticate_user(username: str, password: str) -> dict | None:
+def authenticate_user(email: str, password: str) -> dict | None:
     """Verify credentials. Returns user dict on success, None on failure."""
+    email_norm = (email or "").strip().lower()
+
     conn = get_connection()
     row = conn.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
+        "SELECT * FROM users WHERE email = ? OR username = ?", (email_norm, email_norm)
     ).fetchone()
     conn.close()
     if row is None:
@@ -397,12 +499,41 @@ def get_or_create_user(name: str = "default") -> dict:
 
 def update_user(user_id: int, **kwargs):
     """Update arbitrary user columns. Only whitelisted columns accepted."""
-    allowed = {"age", "gender", "weight_kg", "height_cm", "activity",
-               "diet", "bmi", "daily_goal", "name", "target_weight",
-               "goal_type", "goal_pace"}
+    allowed = {
+        "age",
+        "gender",
+        "weight_kg",
+        "height_cm",
+        "activity",
+        "activity_level",
+        "diet",
+        "diet_type",
+        "bmi",
+        "daily_goal",
+        "name",
+        "target_weight",
+        "target_weight_kg",
+        "goal_type",
+        "goal_pace",
+    }
     cols = {k: v for k, v in kwargs.items() if k in allowed}
     if not cols:
         return
+
+    # Keep legacy and canonical columns synchronized.
+    if "activity_level" in cols and "activity" not in cols:
+        cols["activity"] = cols["activity_level"]
+    if "activity" in cols and "activity_level" not in cols:
+        cols["activity_level"] = cols["activity"]
+    if "diet_type" in cols and "diet" not in cols:
+        cols["diet"] = cols["diet_type"]
+    if "diet" in cols and "diet_type" not in cols:
+        cols["diet_type"] = cols["diet"]
+    if "target_weight_kg" in cols and "target_weight" not in cols:
+        cols["target_weight"] = cols["target_weight_kg"]
+    if "target_weight" in cols and "target_weight_kg" not in cols:
+        cols["target_weight_kg"] = cols["target_weight"]
+
     set_clause = ", ".join(f"{k} = ?" for k in cols)
     values = list(cols.values()) + [user_id]
     conn = get_connection()
