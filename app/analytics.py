@@ -222,7 +222,7 @@ def render_analytics():
     # ── Section 4: Hydration Trends ──────────────────────────────────────────
     st.markdown("### 💧 Hydration Trends")
     if not df_hyd.empty:
-        target_ml = 3000
+        target_ml = st.session_state.get("hydration_target", 3000)
         df_hyd["pct"] = (df_hyd["total_ml"] / target_ml * 100).round(1)
         fig_hyd = go.Figure()
         fig_hyd.add_trace(go.Bar(
@@ -247,7 +247,7 @@ def render_analytics():
         ))
         fig_hyd.add_hline(
             y=target_ml, line_dash="dash", line_color="#00E676",
-            annotation_text="Goal: 3000 ml",
+            annotation_text=f"Goal: {target_ml} ml",
             annotation_position="top left",
             annotation_font_color="#00E676",
         )
@@ -459,12 +459,13 @@ def _generate_insights(df_cal, df_hyd, df_meal, daily_goal, db_user) -> list:
     # Hydration insights
     if not df_hyd.empty:
         avg_hyd = df_hyd["total_ml"].mean()
-        if avg_hyd >= 3000:
-            tips.append(("💧", f"Excellent hydration! You're averaging {avg_hyd:.0f} ml/day — above the 3L goal.", "good"))
-        elif avg_hyd >= 2000:
-            tips.append(("💧", f"Good hydration effort. Averaging {avg_hyd:.0f} ml/day — try to hit 3000 ml daily.", "info"))
+        ht = st.session_state.get("hydration_target", 3000)
+        if avg_hyd >= ht:
+            tips.append(("💧", f"Excellent hydration! You're averaging {avg_hyd:.0f} ml/day — above the {ht}ml goal.", "good"))
+        elif avg_hyd >= ht * 0.67:
+            tips.append(("💧", f"Good hydration effort. Averaging {avg_hyd:.0f} ml/day — try to hit {ht} ml daily.", "info"))
         else:
-            tips.append(("⚠️", f"Low hydration: only {avg_hyd:.0f} ml/day on average. Aim for at least 3000 ml.", "warn"))
+            tips.append(("⚠️", f"Low hydration: only {avg_hyd:.0f} ml/day on average. Aim for at least {ht} ml.", "warn"))
 
     # Macro insights
     if not df_cal.empty and "total_protein" in df_cal.columns:

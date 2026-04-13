@@ -10,7 +10,7 @@ def render_recipes():
         unsafe_allow_html=True,
     )
 
-    uid = st.session_state.get("user_id", 1)
+    uid = st.session_state["user_id"]
     recipes = get_saved_recipes(uid)
 
     if not recipes:

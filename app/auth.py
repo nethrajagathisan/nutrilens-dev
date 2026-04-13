@@ -51,9 +51,9 @@ def _calc_daily_goal(weight_kg: float, height_cm: float, age: int, gender: str,
 def render_auth():
     """Render dedicated Login/Signup pages when user is not authenticated."""
     st.markdown(
-        '<div class="onboarding-header">'
-        '<h1>NutriLens</h1>'
-        '<p>Sign in to continue to your dashboard</p>'
+        '<div class="auth-brand">'
+        '<h1>🥑 NutriLens</h1>'
+        '<p>Your AI-powered nutrition companion</p>'
         '</div>',
         unsafe_allow_html=True,
     )

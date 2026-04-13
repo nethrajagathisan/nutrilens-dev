@@ -250,7 +250,7 @@ def _display_plan(plan: dict):
                 )
 
             # Day donut chart
-            if any(meals.get(m, {}).get("calories", 0) for m in MEAL_COLOURS):
+            if any(meals.get(m, {}).get("calories", 0) for m in _MEAL_COLOURS):
                 fig = go.Figure(data=[go.Pie(
                     labels=[m for m in _MEAL_COLOURS if meals.get(m)],
                     values=[meals.get(m, {}).get("calories", 0) for m in _MEAL_COLOURS if meals.get(m)],

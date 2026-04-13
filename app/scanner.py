@@ -56,7 +56,7 @@ def _food_scanner():
             st.image(img, use_container_width=True)
             if st.button("🔍 IDENTIFY FOOD", key="btn_identify"):
                 if not st.session_state.get("active_model"):
-                    st.error("Link your API Key in the Sidebar first!")
+                    st.error("AI not connected — add GEMINI_API_KEY to your .env file.")
                 else:
                     with st.spinner("AI is analysing... 🧠"):
                         res = analyze_image(img)
@@ -179,7 +179,7 @@ def _barcode_scanner():
             key="bc_meal",
         )
         if st.button("➕ Add to Diary", key="btn_bc_log"):
-            uid = st.session_state.get("user_id", 1)
+            uid = st.session_state["user_id"]
             add_food_log(
                 user_id=uid,
                 name=product["name"],
@@ -222,7 +222,7 @@ def _fridge_scanner():
 
         if st.button("🔎 Identify Ingredients", key="btn_fridge_scan"):
             if not st.session_state.get("active_model"):
-                st.error("Link your API Key in the Sidebar first!")
+                st.error("AI not connected — add GEMINI_API_KEY to your .env file.")
             else:
                 with st.spinner("Scanning fridge... 🔍"):
                     items = analyze_fridge(img)
@@ -327,7 +327,7 @@ def _show_nutrition_panel(d: dict):
         key="scan_meal",
     )
     if st.button("➕ Add to Diary", key="btn_add_diary"):
-        uid = st.session_state.get("user_id", 1)
+        uid = st.session_state["user_id"]
         add_food_log(
             user_id=uid,
             name=d["name"],
@@ -370,7 +370,7 @@ def _render_recipe_cards(recipes: list[dict], source_food: str,
                 mc3.metric("Fat", f"{r.get('fat', 0)}g")
 
             if st.button(f"💾 Save Recipe", key=f"{key_prefix}_save_{i}"):
-                uid = st.session_state.get("user_id", 1)
+                uid = st.session_state["user_id"]
                 save_recipe(
                     user_id=uid,
                     title=r.get("title", f"Recipe {i+1}"),

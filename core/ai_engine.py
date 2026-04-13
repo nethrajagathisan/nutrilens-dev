@@ -107,8 +107,8 @@ def connect_to_best_model(key: str) -> str | None:
 def analyze_image(image):
     """Send a food image to Gemini and return structured nutrition JSON."""
     try:
-        if not st.session_state["active_model"]:
-            return {"error": "Link Key First 🔑"}
+        if not st.session_state.get("active_model"):
+            return {"error": "AI not connected — add GEMINI_API_KEY to your .env file"}
         genai.configure(api_key=st.session_state["api_key"])
         model = genai.GenerativeModel(st.session_state["active_model"])
         prompt = """
@@ -146,8 +146,8 @@ def get_recipes(food: str, diet: str) -> list[dict]:
 def analyze_fridge(image) -> list[dict]:
     """Send a fridge/pantry image to Gemini and identify available ingredients."""
     try:
-        if not st.session_state["active_model"]:
-            return [{"error": "Link Key First 🔑"}]
+        if not st.session_state.get("active_model"):
+            return [{"error": "AI not connected — add GEMINI_API_KEY to your .env file"}]
         genai.configure(api_key=st.session_state["api_key"])
         model = genai.GenerativeModel(st.session_state["active_model"])
         prompt = """

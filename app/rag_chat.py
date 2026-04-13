@@ -19,7 +19,7 @@ def render_rag_chat():
     st.markdown("## 💪 Fitness & Nutrition Coach")
     st.caption("Ask about nutrition, recovery, hydration, training fuel, or weight trends. Answers are grounded in a verified coach knowledge base plus your last 7 days of logs.")
     if not ai_connected:
-        st.info("AI is not connected. The page will still answer using the local coach knowledge base and your recent log data.")
+        st.info("💡 AI is not connected — add `GEMINI_API_KEY` to your `.env` file for full responses. The page will still answer using the local coach knowledge base and your recent log data.")
 
     # Clear button (top-right)
     _, clear_col = st.columns([5, 1])

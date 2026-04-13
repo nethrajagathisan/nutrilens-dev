@@ -137,8 +137,8 @@ def render_diary():
                 fillcolor="rgba(133, 227, 255, 0.15)",
             ))
             fig_hyd.add_hline(
-                y=3000, line_dash="dash", line_color="#00E676",
-                annotation_text="Goal: 3000 ml",
+                y=st.session_state.get("hydration_target", 3000), line_dash="dash", line_color="#00E676",
+                annotation_text=f"Goal: {st.session_state.get('hydration_target', 3000)} ml",
                 annotation_position="top left",
             )
             fig_hyd.update_layout(

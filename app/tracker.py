@@ -105,7 +105,7 @@ def render_tracker():
         today_ml = get_hydration_today(uid)
         st.session_state["water_ml"] = today_ml
 
-        daily_target = 3000
+        daily_target = st.session_state.get("hydration_target", 3000)
         pct = min(today_ml / daily_target, 1.0)
 
         h1, h2, h3 = st.columns(3)

@@ -134,7 +134,7 @@ def render_home():
     cards = [
         ("🍽️", "Meals", str(meal_count), f"{total_cal} kcal logged"),
         ("🏃", "Exercise", f"{total_burn}", "kcal burned"),
-        ("💧", "Water", f"{water_ml}", f"/ 3000 ml"),
+        ("💧", "Water", f"{water_ml}", f"/ {st.session_state.get('hydration_target', 3000)} ml"),
         ("⚖️", "Weight", f"{current_weight:.1f}", "kg"),
     ]
     for i, (icon, label, value, sub) in enumerate(cards):
@@ -192,8 +192,9 @@ def render_home():
     else:
         recs.append(("✅ On Track", f"Only **{remaining} kcal** left — you're doing great today!"))
 
-    if water_ml < 2000:
-        recs.append(("💧 Hydration Reminder", f"You've had {water_ml}ml today. Try to reach 3000ml for optimal health."))
+    if water_ml < st.session_state.get("hydration_target", 3000) * 0.67:
+        hydration_target = st.session_state.get("hydration_target", 3000)
+        recs.append(("💧 Hydration Reminder", f"You've had {water_ml}ml today. Try to reach {hydration_target}ml for optimal health."))
 
     if total_burn == 0:
         recs.append(("🏃 Get Moving", "No exercise logged yet. Even a 15-minute walk can boost your mood and metabolism!"))

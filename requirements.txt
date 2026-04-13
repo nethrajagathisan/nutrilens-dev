@@ -8,3 +8,4 @@ Pillow
 bcrypt
 chromadb
 SpeechRecognition
+python-dotenv
