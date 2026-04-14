@@ -2,15 +2,16 @@ import streamlit as st
 
 from config.settings import PAGE_CONFIG, init_session_state
 from config.styles import inject_css
-from components.sidebar import render_topnav, render_sidebar
+from components.sidebar import render_sidebar
 from app.auth import render_auth
+
+# Import page render functions
 from app.home import render_home
 from app.log_section import render_log_section
 from app.insights_section import render_insights_section
 from app.plans_section import render_plans_section
 from app.profile_section import render_profile_section
 
-# Legacy imports — still used when navigating to specific sub-pages
 from app.scanner import render_scanner
 from app.tracker import render_tracker
 from app.recipes import render_recipes
@@ -36,55 +37,45 @@ if not st.session_state["logged_in"]:
     render_auth()
     st.stop()
 
-# --- Top Navigation Bar ---
-render_topnav()
-
-# --- Sidebar (AI, hydration, coach) ---
+# --- Sidebar Widgets (AI, hydration, coach) ---
+# Note: Streamlit's native navigation will automatically append itself to the sidebar.
 render_sidebar()
 
-# --- Page Router ---
-page = st.session_state.get("page", "Home")
+# --- Page Router using st.navigation and st.Page ---
+pages = {
+    "Main Dashboard": [
+        st.Page(render_home, title="Overview", icon=":material/home:", default=True),
+        st.Page(render_profile_section, title="User Profile", icon=":material/person:"),
+    ],
+    "Logging & Tracking": [
+        st.Page(render_log_section, title="Log Hub", icon=":material/edit_document:"),
+        st.Page(render_tracker, title="Food Tracker", icon=":material/restaurant:"),
+        st.Page(render_scanner, title="Fast Scanner", icon=":material/qr_code_scanner:"),
+        st.Page(render_voice_logger, title="Voice Logger", icon=":material/mic:"),
+        st.Page(render_exercise_logger, title="Exercise", icon=":material/fitness_center:"),
+        st.Page(render_diary, title="Diary", icon=":material/book:"),
+    ],
+    "Insights & AI Coach": [
+        st.Page(render_insights_section, title="Insights Hub", icon=":material/lightbulb:"),
+        st.Page(render_analytics, title="Analytics", icon=":material/analytics:"),
+        st.Page(render_fingerprint, title="Metabolic Fingerprint", icon=":material/fingerprint:"),
+        st.Page(render_rl_dashboard, title="Adaptive Dashboard", icon=":material/tune:"),
+        st.Page(render_rag_chat, title="Nutrition Coach", icon=":material/chat:"),
+    ],
+    "Plans & Nutrition": [
+        st.Page(render_plans_section, title="Plans Hub", icon=":material/list_alt:"),
+        st.Page(render_meal_planner, title="Meal Planner", icon=":material/calendar_today:"),
+        st.Page(render_recipes, title="Recipes", icon=":material/local_dining:"),
+        st.Page(render_micronutrients, title="Micronutrients", icon=":material/science:"),
+    ],
+    "Extras": [
+        st.Page(render_achievements, title="Achievements", icon=":material/emoji_events:"),
+        st.Page(render_data_export, title="Data Export", icon=":material/download:"),
+    ]
+}
 
-# Primary section routing
-if page == "Home":
-    render_home()
-elif page == "Log":
-    render_log_section()
-elif page == "Insights":
-    render_insights_section()
-elif page == "Plans":
-    render_plans_section()
-elif page == "Profile":
-    render_profile_section()
+# Initialize navigation
+pg = st.navigation(pages)
 
-# Legacy page routing (for quick-action buttons that link to specific pages)
-elif "Scan" in page:
-    render_scanner()
-elif "Tracker" in page:
-    render_tracker()
-elif "Recipe" in page:
-    render_recipes()
-elif "Diary" in page:
-    render_diary()
-elif "Analytics" in page:
-    render_analytics()
-elif "Fingerprint" in page:
-    render_fingerprint()
-elif "Adaptive" in page:
-    render_rl_dashboard()
-elif "Meal Planner" in page:
-    render_meal_planner()
-elif "Coach" in page or "Nutrition" in page:
-    render_rag_chat()
-elif "Micronutrient" in page:
-    render_micronutrients()
-elif "Exercise" in page:
-    render_exercise_logger()
-elif "Voice" in page:
-    render_voice_logger()
-elif "Export" in page:
-    render_data_export()
-elif "Achievement" in page:
-    render_achievements()
-else:
-    render_home()
+# Run the selected page
+pg.run()
